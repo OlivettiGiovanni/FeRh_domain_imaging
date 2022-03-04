@@ -1,0 +1,246 @@
+rem Intensity vs time, measuremenet of reflectivity on FeRh on GaAs hysteresis cycle
+rem Intensity averaged over a rectangular region each defined time interval
+rem info stored in a output txt file
+
+
+// ------------------------------------------------------- USER DATA -----------------------------------------------------------------
+
+// information the user have to provide before starting ANY series of measurements
+Ti = 110   // initial temperature of the cycle
+Tf= 80     // final temperature of the cycle
+Trate = 2      //øC per minute, ramp velocity (reliable to convert time in T, error of the order of 1%)
+Tin$ = Ti    // conversion into a string to use this info for the folder name
+Tfin$ = Tf   // conversion into a string to use this info for the folder name
+
+name_series$ = "1"     // label that characterizes the series. Each series has a dedicated folder, so this info is useful when you are using another program (no need to look to the main folder to have this info))
+sample_name$ = "test"    // name of the sample that will define the final folder
+
+// Chose the region over which you want to compute the average (according to the homogeneity of the illumination)
+// unit of pixels. Full range = 1392 x 1040
+imin=250    
+imax=1000
+jmin=150
+jmax=850
+
+
+
+
+
+
+// -------------------------------------------------------- FOLDERS AND INPUTS -------------------------------------------------------
+
+// definition of some folders name and variables
+path$ = "D:\Data imagerie seule\FeRh on GaAs\" + sample_name$ + "\" + name_series$ + "-" + sample_name$ +  "-" + Tin$ + "-" + Tfin$ + "\"
+// path = folder of the measurement. Example: D:\Data Imagerie seule\FeRh on GaAs\P17d3\1-P17d3-80-110\
+actualdate$ = date$()  //way to have the date of the day the measuremenets are carried out
+file_moyenne$ =  path$ + name_series$ + "-" + sample_name$ + "-" + actualdate$ + "average" + ".txt"  // file for the averages
+timestamp$ = path$ + name_series$ + "-" + sample_name$ + "-" + actualdate$ + "timestamp" + ".txt"  // file for the time
+
+
+
+//Space for eventual required inputs, maybe you can:
+// ask if you want to modify the default settings; if yes; insert all of them
+settings = 1
+//input("Do you want to keep the default setting? Type 1 if yes, 0 if not", settings)
+if settings == 0 then 
+	input("Exposure time, that by default is"; expTime, expTime)
+	input("Number of accumulations, that by default is"; numAccums,  numAccums)
+	input("Delay between two successive accumulations"; ACT, ACT)
+	input("Numbers of scan in a series"; numKins, numKins)
+	input("Delay between two scan in a serie"; KTC, KTC)
+endif 
+
+
+// Number of measuremenet to be taken. Fix this number according to the Delta T and the ramp velocity
+nbfiles=501
+if nbfiles>500  then
+	input ("Number of images to save (max=500) ", nbfiles)
+endif
+// think about a way to ask as an input the Delta T you want to consider, considering a Delta t per image = 2 s + additional delay
+
+
+
+
+
+
+
+// -----------------------------------  INITIALISATION DE LA CAMERA   -----------------------------------
+
+//Default settings for SetKinetics 
+expTime = 0.01
+numAccums = 1
+ACT = 0
+numKins = 1
+KCT = 0
+//SetKinetics(expTime, numAccums, ACT,numKins,KCT)
+// SetKinetics IS NOT USEFUL FOR OUR NECESSITIES cause we need to save each image and make some operations between two snapshots
+
+
+// Additional settings
+ShowTimings()  // shows the difference between the set time options and the real one
+	 
+rem Type d'acquisition
+SetAcquisitionType (0)
+	rem 0=signal ; 1=background ; 2=référence
+
+rem Trigger CCD
+SetTriggerMode (0)
+	rem 0=internal ; 1=external
+
+rem Mode de lecture de la CCD
+SetReadoutMode (4)
+	rem 0=full vertical binning
+	rem 1= multitrack
+	rem 2 = reserved
+	rem 3 = single track
+	rem 4 = full resolution image
+	
+SetReadoutTime (1)
+	rem  1 = 1 microseconde/pixel
+	rem  2 = 2      "
+	rem 16 =16      "
+
+rem Type de données à lire
+SetDataType (1)
+	rem 0 = signal
+	rem 1 = background
+	rem 2 référence
+
+
+
+
+
+
+
+
+// ------------------------------------------- MAIN PROGRAMM ------------------------------------------
+
+// ACQUISITION DES IMAGES
+
+counter = 1   // starting value for the variable that will sweep over all the required measuremenets
+fc=1    // variable that will refers to the window/s opened - in this program each time we open a window we close it, so fc has to remain equal to 1
+
+while(counter <=nbfiles)
+	timeval$ = time$()   //clock time of the pc before the "run()" instruction
+	run()
+	write(timestamp$, timeval$)    //write on a dedicate file the time at which the snapshot has been taken (it is the time at which the instruction "run()" has been executed
+	t$ = counter     // define the right variable for the next subroutine (we need a string to save the file number in the file name)
+	gosub .NumeroFichier     // recall the right name for our file
+	save(#0,path_complet$)      // save the windows in the path_complete file defined above
+	// delay(2000)    //additional delay between the images. The total time difference is not constant due to memory transfer time
+	closeWindow(#1)    // close the window in order to avoid to go out of RAM
+	counter =counter+1   //increase the count
+wend
+
+gosub .EnregistrerFichierIntMoyenne    // subroutine that compute and save the averqge on the dedicated file
+
+
+
+
+
+
+
+
+// ----------------------------------------SUBROUTINES --------------------------------------------------
+
+            
+// Procedure to compute the average                   
+.moyenne
+//INITIALISATIONS
+ntot=(imax-imin+1)*(jmax-jmin+1)
+Izero=0
+// set the variable starting values
+i=imin
+j=jmin
+
+// Sum over the chosen pixels
+while (i<=imax)
+	while(j<=jmax)
+	Izero = Izero + #fc_sig[i,j]
+	j=j+1
+	wend
+	i=i+1
+	j=jmin	
+wend
+
+// average over the pixels of the chosen rectangle
+Izero = Izero /ntot
+
+output(50,250,400,200)  /// makes a windows that considers q precise number of pixels         WHY??
+print(fc, Izero)    // print the average of the intensity at screen                               WHY??
+fc=fc+1      // improve fc by one, but we don't need this...                                     WHY??
+
+Izero$ = str$(Izero)    // transformed into a string in order to write it on a file
+return
+
+
+
+
+
+// function to close all the windows, not used, but might be useful
+.close
+fc=1
+while (fc<=nbfiles)
+CloseWindow(#fc)
+fc=fc+1
+wend 
+return 
+
+
+
+
+
+
+
+// Procedure that returns the right name for the file depending on the variable counter and keeping always the same amount of digits
+.NumeroFichier3digits
+	if counter<=9 then
+		path_complet$ = path$ + name_series$ + "-" + "00" + t$ + "-" + sample_name$ + "-" + actualdate$ + ".tif"
+	else 
+		if counter <=99 then
+			path_complet$ = path$ + name_series$ +  "-" + "0" + t$ + "-" + sample_name$ + "-" + actualdate$ +".tif"
+		else 
+			path_complet$ = path$ + name_series$ +  "-" + t$ + "-" +  sample_name$ + "-" + actualdate$ + ".tif"
+
+		endif
+	endif
+return
+// example of the file name:  1-003-P17d3-04-02-2022.tif, in the folder (example): D:\Data Imagerie seule\FeRh on GaAs\P17d3\1-P17d3-80-110\
+// the number that identifies the seriesis put in front of the file name in order to visualize easily the list of images of a series
+// less useful now that I have created a folder for each series
+
+
+
+
+
+
+
+// Procedure that returns the right name for the file depending on the variable counter and having different number of digits. 
+//The file number is before the number series
+.NumeroFichier
+	path_complet$ = path$ + t$ + "-" + name_series$ + "-" + sample_name$ + "-" + actualdate$ + ".tif"
+return
+
+
+
+
+
+
+
+
+//Procedure that compute the average and save it in the proper file --------------------------------------------------------------------------------------
+.EnregistrerFichierIntMoyenne
+	counter=1     // variable on which we cycle to relad all the images
+	write(file_moyenne$, "point", chr$(9), "time", chr$(9), "Av_int")  // I write the hader of my txt file
+	while (counter<=nbfiles)
+		t$ = counter     // string used by the next subroutine
+		gosub .NumeroFichier          // In order to recover the filename corresponding to the image we want to load and on which we will compute the average
+		load(#counter,path_complet$)      // we will open the image in the window 0
+		gosub .moyenne  // procedure to compute the average and save it a proper file
+		// each time this instruction is re-executed it will read the successive line
+		read(timestamp$, timeaq$)       // read from timestamp$ file the time at which the snapshot was taken
+		write(file_moyenne$, counter, chr$(9), timeaq$, chr$(9), Izero$)  // it saves the Izero computed value in the first empty line
+		closeWindow(#counter)      // close the just opened window in order to avoid RAM saturation
+		counter=counter+1
+	wend 
+return
