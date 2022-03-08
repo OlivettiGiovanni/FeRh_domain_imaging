@@ -3,16 +3,23 @@ rem Intensity averaged over a rectangular region each defined time interval
 rem info stored in a output txt file
 
 
+
+
+
+
+
+
+
 // ------------------------------------------------------- USER DATA -----------------------------------------------------------------
 
 // information the user have to provide before starting ANY series of measurements
-Ti = 110   // initial temperature of the cycle
-Tf= 80     // final temperature of the cycle
+Ti = 120   // initial temperature of the cycle
+Tf= 70     // final temperature of the cycle
 Trate = 2      //øC per minute, ramp velocity (reliable to convert time in T, error of the order of 1%)
 Tin$ = Ti    // conversion into a string to use this info for the folder name
 Tfin$ = Tf   // conversion into a string to use this info for the folder name
 
-name_series$ = "1"     // label that characterizes the series. Each series has a dedicated folder, so this info is useful when you are using another program (no need to look to the main folder to have this info))
+name_series$ = "2"     // label that characterizes the series. Each series has a dedicated folder, so this info is useful when you are using another program (no need to look to the main folder to have this info))
 sample_name$ = "test"    // name of the sample that will define the final folder
 
 // Chose the region over which you want to compute the average (according to the homogeneity of the illumination)
@@ -21,6 +28,20 @@ imin=250
 imax=1000
 jmin=150
 jmax=850
+
+
+expTime = 0.01
+Readouttime = 1
+	//  1 = 1 microseconde/pixel
+	//  2 = 2      "
+	// 16 =16      "
+
+
+
+
+
+
+
 
 
 
@@ -52,9 +73,9 @@ endif
 
 
 // Number of measuremenet to be taken. Fix this number according to the Delta T and the ramp velocity
-nbfiles=501
-if nbfiles>500  then
-	input ("Number of images to save (max=500) ", nbfiles)
+nbfiles=176
+if nbfiles>175  then
+	input ("Number of images to save (max=350) ", nbfiles)
 endif
 // think about a way to ask as an input the Delta T you want to consider, considering a Delta t per image = 2 s + additional delay
 
@@ -64,47 +85,91 @@ endif
 
 
 
+
+
+
+
+
+
+
+
+
+
 // -----------------------------------  INITIALISATION DE LA CAMERA   -----------------------------------
 
-//Default settings for SetKinetics 
-expTime = 0.01
+
+// Additional settings
+ShowTimings()  // shows the difference between the set time options and the real one
+
+	 
+	 
+// Determine the type of aquisition and the aquisition mode
+SetAcquisitionType (0)   
+// 0=signal ; 1=background ; 2=reference
+SetAcquisitionMode (1)	// 1=single scan ; 2=accumulate ; 3=Kinetics
+// NOTE
+// SingleScan requires: ExpTime
+// Accumulate requires: ExpTime, AccumulationCycleTime, Number of accumulations
+// Kinetics requires: ExpTime, AccumulationCycleTime, Number of accumulations, KineticCycleTime, Number of series
+
+// SingleScan
+SetExposureTime (expTime)			// temps de pause en secondes
+
+//Kinetics
 numAccums = 1
 ACT = 0
 numKins = 1
 KCT = 0
 //SetKinetics(expTime, numAccums, ACT,numKins,KCT)
-// SetKinetics IS NOT USEFUL FOR OUR NECESSITIES cause we need to save each image and make some operations between two snapshots
+
+//Fast kinetics
+//SetFastKinetics(100,1,??)
+
+//Accumulate
+SetExposureTime (expTime)	
+SetAccumulate(expTime, 1, 0)
+SetAccumulateCycleTime(expTime)
 
 
-// Additional settings
-ShowTimings()  // shows the difference between the set time options and the real one
-	 
-rem Type d'acquisition
-SetAcquisitionType (0)
-	rem 0=signal ; 1=background ; 2=référence
 
-rem Trigger CCD
+
+//Additional settings, they may influence the real value accumulation time etc...
+// Trigger CCD
 SetTriggerMode (0)
-	rem 0=internal ; 1=external
+// 0=internal ; 1=external
 
-rem Mode de lecture de la CCD
+// Mode de lecture de la CCD
 SetReadoutMode (4)
-	rem 0=full vertical binning
-	rem 1= multitrack
-	rem 2 = reserved
-	rem 3 = single track
-	rem 4 = full resolution image
+	// 0=full vertical binning
+	// 1= multitrack
+	// 2 = reserved
+	// 3 = single track
+	// 4 = full resolution image
 	
-SetReadoutTime (1)
-	rem  1 = 1 microseconde/pixel
-	rem  2 = 2      "
-	rem 16 =16      "
+SetReadoutTime (Readouttime)
+	//  1 = 1 microseconde/pixel
+	//  2 = 2      "
+	// 16 =16      "
 
-rem Type de données à lire
+
+// determine the type of signal you want
 SetDataType (1)
-	rem 0 = signal
-	rem 1 = background
-	rem 2 référence
+// 1 = Counts; 2 = Counts (Background corrected); 3 = % Absorptance
+// 4 = % Reflectance; 5 = % Transmittance; 6 = Absorbance Units
+// 7 = Absorption coefficient; 8 = Attenuation; 9 = Data * Ref; 
+// 10 = Log (Base 10); 16 = Flatfield; 17 = Counts per second;
+// 18 = Counts (Background corrected) per second
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -119,20 +184,31 @@ SetDataType (1)
 
 counter = 1   // starting value for the variable that will sweep over all the required measuremenets
 fc=1    // variable that will refers to the window/s opened - in this program each time we open a window we close it, so fc has to remain equal to 1
-
+//closeWindow(#0)  //close the actually open window
 while(counter <=nbfiles)
 	timeval$ = time$()   //clock time of the pc before the "run()" instruction
 	run()
 	write(timestamp$, timeval$)    //write on a dedicate file the time at which the snapshot has been taken (it is the time at which the instruction "run()" has been executed
 	t$ = counter     // define the right variable for the next subroutine (we need a string to save the file number in the file name)
 	gosub .NumeroFichier     // recall the right name for our file
-	save(#0,path_complet$)      // save the windows in the path_complete file defined above
-	// delay(2000)    //additional delay between the images. The total time difference is not constant due to memory transfer time
-	closeWindow(#1)    // close the window in order to avoid to go out of RAM
+	save(#0,path_complet$)      // save the windows in the path_complete file defined above and it opebs a new window (number 1))
+	// delay(8000)    //additional delay between the images. The total time difference is not constant due to memory transfer time
+	closeWindow(#1)    // close the window number 1, keeping opened the windows 0 in order to avoid to go out of RAM
+	closeWindow(#0)
 	counter =counter+1   //increase the count
 wend
 
 gosub .EnregistrerFichierIntMoyenne    // subroutine that compute and save the averqge on the dedicated file
+
+//load(#1, path_complet$)
+//print(#1_sig[400,500])
+//a = mean(#1, imin,imax,jmin,jmax)
+//print(a)
+
+
+
+
+
 
 
 
@@ -143,11 +219,13 @@ gosub .EnregistrerFichierIntMoyenne    // subroutine that compute and save the a
 
 // ----------------------------------------SUBROUTINES --------------------------------------------------
 
+   
             
 // Procedure to compute the average                   
 .moyenne
 //INITIALISATIONS
-ntot=(imax-imin+1)*(jmax-jmin+1)
+ntot=(imax-imin)*(jmax-jmin)
+print(ntot)
 Izero=0
 // set the variable starting values
 i=imin
@@ -156,7 +234,10 @@ j=jmin
 // Sum over the chosen pixels
 while (i<=imax)
 	while(j<=jmax)
-	Izero = Izero + #fc_sig[i,j]
+	Izero = Izero + #1_sig[i,j]     // for info on fc_sig[ , ], see "manipulating data"
+	//if (i == imin+1 or i == imin+300 or i == imin +600) then
+	//	print(#fc_sig[i,j])
+	//endif
 	j=j+1
 	wend
 	i=i+1
@@ -165,10 +246,11 @@ wend
 
 // average over the pixels of the chosen rectangle
 Izero = Izero /ntot
+print(Izero)
 
-output(50,250,400,200)  /// makes a windows that considers q precise number of pixels         WHY??
-print(fc, Izero)    // print the average of the intensity at screen                               WHY??
-fc=fc+1      // improve fc by one, but we don't need this...                                     WHY??
+// output(50,250,400,200)  /// makes a windows that considers a precise number of pixels         
+//print(fc, Izero)    // print the average of the intensity at screen                               
+//fc=fc+1      // improve fc by one, but we don't need this...                                     
 
 Izero$ = str$(Izero)    // transformed into a string in order to write it on a file
 return
@@ -184,7 +266,7 @@ while (fc<=nbfiles)
 CloseWindow(#fc)
 fc=fc+1
 wend 
-return 
+return
 
 
 
@@ -235,12 +317,12 @@ return
 	while (counter<=nbfiles)
 		t$ = counter     // string used by the next subroutine
 		gosub .NumeroFichier          // In order to recover the filename corresponding to the image we want to load and on which we will compute the average
-		load(#counter,path_complet$)      // we will open the image in the window 0
+		load(#1,path_complet$)      // we will open the image in the window 0
 		gosub .moyenne  // procedure to compute the average and save it a proper file
 		// each time this instruction is re-executed it will read the successive line
 		read(timestamp$, timeaq$)       // read from timestamp$ file the time at which the snapshot was taken
 		write(file_moyenne$, counter, chr$(9), timeaq$, chr$(9), Izero$)  // it saves the Izero computed value in the first empty line
-		closeWindow(#counter)      // close the just opened window in order to avoid RAM saturation
+		closeWindow(#1)      // close the just opened window in order to avoid RAM saturation
 		counter=counter+1
 	wend 
-return
+return 
